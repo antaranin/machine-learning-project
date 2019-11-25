@@ -286,3 +286,5 @@ Temporary Items
 .idea/misc.xml
 .idea/modules.xml
 .idea/vcs.xml
+/vectors/news_vectors.model.vectors.npy
+/vectors/news_vectors.model
