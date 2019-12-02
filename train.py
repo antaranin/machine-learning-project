@@ -241,7 +241,7 @@ def train(x_train, y_train, vocabulary, x_dev, y_dev, embedding_vectors=None):
 
 def main(argv=None):
     x_train, y_train, vocabulary, x_dev, y_dev, embedding_vectors = preprocessing()
-    train(x_train, y_train, vocabulary, x_dev, y_dev)
+    train(x_train, y_train, vocabulary, x_dev, y_dev, embedding_vectors)
 
 
 if __name__ == '__main__':
