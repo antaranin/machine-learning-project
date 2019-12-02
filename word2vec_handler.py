@@ -61,7 +61,3 @@ def load_vectors_and_index_mapping(title: str) -> Tuple[Dict[str, int], np.ndarr
     return words_to_indexes, vectors
 
 
-# save_mr_word_vectors()
-w, v = load_mr_word_vectors()
-print(w)
-print(v)

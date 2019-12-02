@@ -1,21 +1,30 @@
+from typing import List, Dict
+
 import tensorflow as tf
 import numpy as np
 import os
 import time
 import datetime
+import tensorflow.data as tfd
+
+from tensorflow.contrib.learn.python.learn.preprocessing import CategoricalVocabulary
+
 from test_cnn import TextCNN
 import data_importer as data
 from tensorflow.contrib import learn
-
 
 # Parameters
 # ==================================================
 
 # Data loading params
-tf.flags.DEFINE_float("dev_sample_percentage", .1, "Percentage of the training data to use for validation")
+from word2vec_handler import load_mr_word_vectors
+
+tf.flags.DEFINE_float("dev_sample_percentage", .1,
+                      "Percentage of the training data to use for validation")
 
 # Model Hyperparameters
-tf.flags.DEFINE_integer("embedding_dim", 128, "Dimensionality of character embedding (default: 128)")
+tf.flags.DEFINE_integer("embedding_dim", 300,
+                        "Dimensionality of character embedding (default: 128)")
 tf.flags.DEFINE_string("filter_sizes", "3,4,5", "Comma-separated filter sizes (default: '3,4,5')")
 tf.flags.DEFINE_integer("num_filters", 128, "Number of filters per filter size (default: 128)")
 tf.flags.DEFINE_float("dropout_keep_prob", 0.5, "Dropout keep probability (default: 0.5)")
@@ -24,7 +33,8 @@ tf.flags.DEFINE_float("l2_reg_lambda", 0.0, "L2 regularization lambda (default: 
 # Training parameters
 tf.flags.DEFINE_integer("batch_size", 64, "Batch Size (default: 64)")
 tf.flags.DEFINE_integer("num_epochs", 200, "Number of training epochs (default: 200)")
-tf.flags.DEFINE_integer("evaluate_every", 100, "Evaluate model on dev set after this many steps (default: 100)")
+tf.flags.DEFINE_integer("evaluate_every", 100,
+                        "Evaluate model on dev set after this many steps (default: 100)")
 tf.flags.DEFINE_integer("checkpoint_every", 100, "Save model after this many steps (default: 100)")
 tf.flags.DEFINE_integer("num_checkpoints", 5, "Number of checkpoints to store (default: 5)")
 # Misc Parameters
@@ -33,20 +43,28 @@ tf.flags.DEFINE_boolean("log_device_placement", False, "Log placement of ops on 
 
 FLAGS = tf.flags.FLAGS
 
+
 def preprocessing():
     x_text, y = data.load_data_and_labels_mr()
+    mapping, embedding_vectors = load_mr_word_vectors()
     y = np.array(y)
+    print(x_text)
+    print(y)
 
-    max_sentence_length = max([len(x) for x in x_text])
-    vocab_processor = learn.preprocessing.VocabularyProcessor(max_sentence_length)
-    x_text = [" ".join(x) for x in x_text]
-    x = np.array(list(vocab_processor.fit_transform(x_text)))
-    print(x)
+    mapping["<PAD>"] = len(embedding_vectors)
+    embedding_vectors = np.append(embedding_vectors, np.zeros((1, 300)), axis=0)
+
+    # vocab_processor = learn.preprocessing.VocabularyProcessor(max_sentence_length)
+    # x = np.array(list(vocab_processor.fit_transform(x_text)))
+    vocabulary = mapping.keys()
+    x = pad_and_index_sentences(x_text, mapping)
+    print(f"X => {x}")
     # Randomly shuffle data
     np.random.seed(10)
     shuffle_indices = np.random.permutation(np.arange(len(y)))
     x_shuffled = x[shuffle_indices]
     y_shuffled = y[shuffle_indices]
+    print(f"X shuffled => {x_shuffled}")
 
     # Split train/test set
     dev_sample_index = -1 * int(FLAGS.dev_sample_percentage * float(len(y)))
@@ -55,9 +73,32 @@ def preprocessing():
 
     del x, y, x_shuffled, y_shuffled
 
-    print("Vocabulary Size: {:d}".format(len(vocab_processor.vocabulary_)))
+    print("Vocabulary Size: {:d}".format(len(vocabulary)))
     print("Train/Dev split: {:d}/{:d}".format(len(y_train), len(y_dev)))
-    return x_train, y_train, vocab_processor, x_dev, y_dev
+    return x_train, y_train, vocabulary, x_dev, y_dev, embedding_vectors
+
+
+def pad_sentences(sentences: List[List[str]]):
+    max_sentence_length = max([len(x) for x in sentences])
+    for sentence in sentences:
+        padding = ["<PAD>" for _ in range(max_sentence_length - len(sentence))]
+        sentence += padding
+
+
+def sentences_to_word_indexes(sentences: List[List[str]], word_mapping: Dict[str, int]) -> List[
+    List[int]]:
+    return [sentence_to_word_indexes(sentence, word_mapping) for sentence in sentences]
+
+
+def sentence_to_word_indexes(sentence: List[str], word_mapping: Dict[str, int]) -> List[int]:
+    return [word_mapping[word] for word in sentence]
+
+
+def pad_and_index_sentences(sentences: List[List[str]], word_mapping: Dict[str, int]) -> \
+        np.ndarray:
+    pad_sentences(sentences)
+    return np.array(sentences_to_word_indexes(sentences, word_mapping))
+
 
 def batch_iter(data, batch_size, num_epochs, shuffle=True):
     """
@@ -65,7 +106,7 @@ def batch_iter(data, batch_size, num_epochs, shuffle=True):
     """
     data = np.array(data)
     data_size = len(data)
-    num_batches_per_epoch = int((len(data)-1)/batch_size) + 1
+    num_batches_per_epoch = int((len(data) - 1) / batch_size) + 1
     for epoch in range(num_epochs):
         # Shuffle the data at each epoch
         if shuffle:
@@ -79,24 +120,25 @@ def batch_iter(data, batch_size, num_epochs, shuffle=True):
             yield shuffled_data[start_index:end_index]
 
 
-def train(x_train, y_train, vocab_processor, x_dev, y_dev):
+def train(x_train, y_train, vocabulary, x_dev, y_dev, embedding_vectors=None):
     # Training
     # ==================================================
 
     with tf.Graph().as_default():
         session_conf = tf.ConfigProto(
-          allow_soft_placement=FLAGS.allow_soft_placement,
-          log_device_placement=FLAGS.log_device_placement)
+            allow_soft_placement=FLAGS.allow_soft_placement,
+            log_device_placement=FLAGS.log_device_placement)
         sess = tf.Session(config=session_conf)
         with sess.as_default():
             cnn = TextCNN(
                 sequence_length=x_train.shape[1],
                 num_classes=y_train.shape[1],
-                vocab_size=len(vocab_processor.vocabulary_),
+                vocab_size=len(vocabulary),
                 embedding_size=FLAGS.embedding_dim,
                 filter_sizes=list(map(int, FLAGS.filter_sizes.split(","))),
                 num_filters=FLAGS.num_filters,
-                l2_reg_lambda=FLAGS.l2_reg_lambda)
+                l2_reg_lambda=FLAGS.l2_reg_lambda,
+                embedding=embedding_vectors)
 
             # Define Training procedure
             global_step = tf.Variable(0, name="global_step", trainable=False)
@@ -109,7 +151,8 @@ def train(x_train, y_train, vocab_processor, x_dev, y_dev):
             for g, v in grads_and_vars:
                 if g is not None:
                     grad_hist_summary = tf.summary.histogram("{}/grad/hist".format(v.name), g)
-                    sparsity_summary = tf.summary.scalar("{}/grad/sparsity".format(v.name), tf.nn.zero_fraction(g))
+                    sparsity_summary = tf.summary.scalar("{}/grad/sparsity".format(v.name),
+                                                         tf.nn.zero_fraction(g))
                     grad_summaries.append(grad_hist_summary)
                     grad_summaries.append(sparsity_summary)
             grad_summaries_merged = tf.summary.merge(grad_summaries)
@@ -140,8 +183,8 @@ def train(x_train, y_train, vocab_processor, x_dev, y_dev):
                 os.makedirs(checkpoint_dir)
             saver = tf.train.Saver(tf.global_variables(), max_to_keep=FLAGS.num_checkpoints)
 
-            # Write vocabulary
-            vocab_processor.save(os.path.join(out_dir, "vocab"))
+            ## Write vocabulary
+            # vocab_processor.save(os.path.join(out_dir, "vocab"))
 
             # Initialize all variables
             sess.run(tf.global_variables_initializer())
@@ -151,9 +194,9 @@ def train(x_train, y_train, vocab_processor, x_dev, y_dev):
                 A single training step
                 """
                 feed_dict = {
-                  cnn.input_x: x_batch,
-                  cnn.input_y: y_batch,
-                  cnn.dropout_keep_prob: FLAGS.dropout_keep_prob
+                    cnn.input_x: x_batch,
+                    cnn.input_y: y_batch,
+                    cnn.dropout_keep_prob: FLAGS.dropout_keep_prob
                 }
                 _, step, summaries, loss, accuracy = sess.run(
                     [train_op, global_step, train_summary_op, cnn.loss, cnn.accuracy],
@@ -167,9 +210,9 @@ def train(x_train, y_train, vocab_processor, x_dev, y_dev):
                 Evaluates model on a dev set
                 """
                 feed_dict = {
-                  cnn.input_x: x_batch,
-                  cnn.input_y: y_batch,
-                  cnn.dropout_keep_prob: 1.0
+                    cnn.input_x: x_batch,
+                    cnn.input_y: y_batch,
+                    cnn.dropout_keep_prob: 1.0
                 }
                 step, summaries, loss, accuracy = sess.run(
                     [global_step, dev_summary_op, cnn.loss, cnn.accuracy],
@@ -195,9 +238,11 @@ def train(x_train, y_train, vocab_processor, x_dev, y_dev):
                     path = saver.save(sess, checkpoint_prefix, global_step=current_step)
                     print("Saved model checkpoint to {}\n".format(path))
 
+
 def main(argv=None):
-    x_train, y_train, vocab_processor, x_dev, y_dev = preprocessing()
-    train(x_train, y_train, vocab_processor, x_dev, y_dev)
+    x_train, y_train, vocabulary, x_dev, y_dev, embedding_vectors = preprocessing()
+    train(x_train, y_train, vocabulary, x_dev, y_dev)
+
 
 if __name__ == '__main__':
     tf.app.run()
