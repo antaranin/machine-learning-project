@@ -46,6 +46,22 @@ def save_mr_word_vectors():
     save_vectors_and_index_mapping(mapping, vectors, "mr")
 
 
+def load_mr_word_vectors() -> Tuple[Dict[str, int], np.ndarray]:
+    return load_vectors_and_index_mapping("mr")
 
-#save_mr_word_vectors()
 
+def load_vectors_and_index_mapping(title: str) -> Tuple[Dict[str, int], np.ndarray]:
+    dir_name = f"vectors/processed/{title}"
+    words_to_indexes = {}
+    with open(f'{dir_name}/mapping.csv', mode='r') as mapping_file:
+        mappings = csv.reader(mapping_file, delimiter=' ', quotechar='"')
+        for entry in mappings:
+            words_to_indexes[entry[0]] = entry[1]
+    vectors = np.load(f"{dir_name}/vectors.npy")
+    return words_to_indexes, vectors
+
+
+# save_mr_word_vectors()
+w, v = load_mr_word_vectors()
+print(w)
+print(v)

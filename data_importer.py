@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Dict, List, DefaultDict
+from typing import Dict, List, DefaultDict, Tuple
 
 import regex as re
 
@@ -75,5 +75,14 @@ def load_sentences_positive_mr():
 
 def load_sentences_negative_mr():
     return load_sentences("data/mr/rt-polarity.pos.txt", "iso-8859-1")
+
+
+def load_data_and_labels_mr() -> Tuple[List[List[str]], List[int]]:
+    positive = load_sentences_positive_mr()
+    negative = load_sentences_negative_mr()
+    labels = [1 for _ in positive]
+    labels += [0 for _ in negative]
+    data = positive + negative
+    return data, labels
 
 # print(clean_line("So, this-is a, (somewhat, maybe) cleaned [1] string? Wohoo!"))
