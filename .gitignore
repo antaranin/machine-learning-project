@@ -288,3 +288,4 @@ Temporary Items
 .idea/vcs.xml
 /vectors/news_vectors.model.vectors.npy
 /vectors/news_vectors.model
+/runs/
