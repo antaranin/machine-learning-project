@@ -80,13 +80,8 @@ def load_sentences_negative_mr():
 def load_data_and_labels_mr() -> Tuple[List[List[str]], List[List[int]]]:
     positive = load_sentences_positive_mr()
     negative = load_sentences_negative_mr()
-    print("Positive")
-    print(positive)
-    print("Negative")
-    print(negative)
     labels = [[1, 0] for _ in positive]
     labels += [[0, 1] for _ in negative]
     data = positive + negative
     return data, labels
 
-# print(clean_line("So, this-is a, (somewhat, maybe) cleaned [1] string? Wohoo!"))
