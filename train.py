@@ -1,74 +1,19 @@
 import datetime
-from typing import List, Dict
 
 import numpy as np
 import tensorflow as tf
 
-import data_importer as data
 from config import *
 from test_cnn import CNN
+
+
 # Data loading params
-from word2vec_handler import load_mr_word_vectors
 
 
 # Parameters
 # ==================================================
 
 
-def preprocessing():
-    x_text, y = data.load_data_and_labels_mr()
-    mapping, embedding_vectors = load_mr_word_vectors()
-    y = np.array(y)
-    print(x_text)
-    print(y)
-
-    mapping["<PAD>"] = len(embedding_vectors)
-    embedding_vectors = np.append(embedding_vectors, np.zeros((1, 300)), axis=0)
-
-    # vocab_processor = learn.preprocessing.VocabularyProcessor(max_sentence_length)
-    # x = np.array(list(vocab_processor.fit_transform(x_text)))
-    vocabulary = mapping.keys()
-    x = pad_and_index_sentences(x_text, mapping)
-    print(f"X => {x}")
-    # Randomly shuffle data
-    np.random.seed(10)
-    shuffle_indices = np.random.permutation(np.arange(len(y)))
-    x_shuffled = x[shuffle_indices]
-    y_shuffled = y[shuffle_indices]
-    print(f"X shuffled => {x_shuffled}")
-
-    # Split train/test set
-    dev_sample_index = -1 * int(TEST_SPLIT_RATIO * float(len(y)))
-    x_train, x_dev = x_shuffled[:dev_sample_index], x_shuffled[dev_sample_index:]
-    y_train, y_dev = y_shuffled[:dev_sample_index], y_shuffled[dev_sample_index:]
-
-    del x, y, x_shuffled, y_shuffled
-
-    print("Vocabulary Size: {:d}".format(len(vocabulary)))
-    print("Train/Dev split: {:d}/{:d}".format(len(y_train), len(y_dev)))
-    return x_train, y_train, vocabulary, x_dev, y_dev, embedding_vectors
-
-
-def pad_sentences(sentences: List[List[str]]):
-    max_sentence_length = max([len(x) for x in sentences])
-    for sentence in sentences:
-        padding = ["<PAD>" for _ in range(max_sentence_length - len(sentence))]
-        sentence += padding
-
-
-def sentences_to_word_indexes(sentences: List[List[str]], word_mapping: Dict[str, int]) -> List[
-    List[int]]:
-    return [sentence_to_word_indexes(sentence, word_mapping) for sentence in sentences]
-
-
-def sentence_to_word_indexes(sentence: List[str], word_mapping: Dict[str, int]) -> List[int]:
-    return [word_mapping[word] for word in sentence]
-
-
-def pad_and_index_sentences(sentences: List[List[str]], word_mapping: Dict[str, int]) -> \
-        np.ndarray:
-    pad_sentences(sentences)
-    return np.array(sentences_to_word_indexes(sentences, word_mapping))
 
 
 def batch_iter(data, batch_size, num_epochs, shuffle=True):
@@ -124,16 +69,16 @@ def train(x_train, y_train, vocabulary, x_dev, y_dev, embedding_vectors=None):
                 """
                 A single training step
                 """
-                step(train_data, train_labels)
+                step(train_data, train_labels, should_print=PRINT_STEPS)
 
-            def dev_step(test_data, test_labels):
+            def test_step(test_data, test_labels):
                 """
                 Evaluates model on a test set
                 """
                 step(test_data, test_labels, 1.0, False)
 
             def step(data, labels, dropout_keep_prob=DROPOUT_KEEP_PROBABILITY,
-                     should_train=True):
+                     should_train=True, should_print=True):
                 data_for_step = {
                     cnn.input_data: data,
                     cnn.input_labels: labels,
@@ -144,11 +89,12 @@ def train(x_train, y_train, vocabulary, x_dev, y_dev, embedding_vectors=None):
                 else:
                     res = sess.run([global_step, cnn.loss, cnn.accuracy], data_for_step)
 
-                current_time = datetime.datetime.now().isoformat()
-                current_step = res[0]
-                loss = res[1]
-                accuracy = res[2]
-                print(f"{current_time}: step {current_step}, loss {loss}, acc {accuracy}")
+                if should_print:
+                    current_time = datetime.datetime.now().isoformat()
+                    current_step = res[0]
+                    loss = res[1]
+                    accuracy = res[2]
+                    print(f"{current_time}: step {current_step}, loss {loss}, acc {accuracy}")
 
             # Generate batches
             batches = batch_iter(
@@ -160,14 +106,7 @@ def train(x_train, y_train, vocabulary, x_dev, y_dev, embedding_vectors=None):
                 current_step = tf.train.global_step(sess, global_step)
                 if current_step % EVALUATE_EVERY == 0:
                     print("\nEvaluation:")
-                    dev_step(x_dev, y_dev)
+                    test_step(x_dev, y_dev)
                     print("")
 
 
-def main(argv=None):
-    x_train, y_train, vocabulary, x_dev, y_dev, embedding_vectors = preprocessing()
-    train(x_train, y_train, vocabulary, x_dev, y_dev, embedding_vectors)
-
-
-if __name__ == '__main__':
-    tf.app.run()
