@@ -7,16 +7,17 @@ import tensorflow as tf
 class CNN(object):
 
     def __init__(
-            self, sequence_length, num_classes, vocab_size,
-            embedding_size, filter_sizes, num_filters, embedding=None):
-        self._setup_placeholders(sequence_length, num_classes)
-        self._setup_embedding(vocab_size, embedding_size, embedding)
-        self._setup_convolutional_pooling_layer(filter_sizes, embedding_size, num_filters,
+            self, sequence_length: int, number_of_classes: int, vocabulary_size: int,
+            embedding_size: int, filter_sizes: List[int], filter_count: int,
+            embedding: np.ndarray = None):
+        self._setup_placeholders(sequence_length, number_of_classes)
+        self._setup_embedding(vocabulary_size, embedding_size, embedding)
+        self._setup_convolutional_pooling_layer(filter_sizes, embedding_size, filter_count,
                                                 sequence_length)
         self._setup_dropout_layer()
 
-        total_filter_count = num_filters * len(filter_sizes)
-        self._setup_output_layer(total_filter_count, num_classes)
+        total_filter_count = filter_count * len(filter_sizes)
+        self._setup_output_layer(total_filter_count, number_of_classes)
         self._setup_loss_calculation()
         self._setup_accuracy_calculation()
 
@@ -27,7 +28,7 @@ class CNN(object):
 
     def _setup_embedding(self, vocabulary_size: int, embedding_size: int,
                          embedding: np.ndarray = None):
-        with tf.device('/cpu:0'), tf.name_scope("embedding"):
+        with tf.name_scope("embedding"):
             embedding_to_use = embedding if embedding is not None \
                 else tf.random_uniform((vocabulary_size, embedding_size), -1.0, 1.0)
 
@@ -55,26 +56,24 @@ class CNN(object):
                                                       number_of_filters: int, embedding_size: int,
                                                       sequence_length: int):
         with tf.name_scope(f"convolutional-maxpool-for-filter-{filter_size}"):
-            # Convolution Layer
             filter_shape = (filter_size, embedding_size, 1, number_of_filters)
             weights = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1))
             bias = tf.Variable(tf.constant(0.1, shape=(number_of_filters,)))
-            conv = tf.nn.conv2d(
+            convolution = tf.nn.conv2d(
                 self.embedded_chars_expanded,
                 weights,
                 strides=(1, 1, 1, 1),
                 padding="VALID")
-            # Apply nonlinearity
 
-            feature_map = tf.nn.relu(tf.nn.bias_add(conv, bias), name="relu")
+            feature_map = tf.nn.relu(tf.nn.bias_add(convolution, bias), name="relu")
 
-            # Maxpooling over the outputs
-            pooled = tf.nn.max_pool(
+            #ksize - window size
+            pooling = tf.nn.max_pool(
                 feature_map,
                 ksize=(1, sequence_length - filter_size + 1, 1, 1),
                 strides=(1, 1, 1, 1),
                 padding='VALID')
-            return pooled
+            return pooling
 
     def _setup_dropout_layer(self):
         with tf.name_scope("dropout"):
@@ -89,8 +88,6 @@ class CNN(object):
             bias = tf.Variable(tf.constant(0.1, shape=[number_of_classes]))
             self.scores = tf.nn.xw_plus_b(self.h_drop, weights, bias)
             self.predictions = tf.argmax(self.scores, 1)
-
-        # Calculate mean cross-entropy loss
 
     def _setup_loss_calculation(self):
         with tf.name_scope("loss"):

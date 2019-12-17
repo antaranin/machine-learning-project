@@ -1,10 +1,9 @@
-import os
-from typing import List, Dict, Iterable, Tuple
-
-from gensim.models import KeyedVectors
 import csv
-import numpy as np
+import os
+from typing import Dict, Iterable, Tuple
 
+import numpy as np
+from gensim.models import KeyedVectors
 from gensim.models.keyedvectors import FastTextKeyedVectors
 
 from data_importer import load_vocabulary_mr

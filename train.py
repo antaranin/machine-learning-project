@@ -1,4 +1,6 @@
 import datetime
+import math
+from typing import Iterable, Tuple, Collection
 
 import numpy as np
 import tensorflow as tf
@@ -18,19 +20,14 @@ class StepRunner:
         self.step_counter = step_counter
 
     def train_step(self, train_data, train_labels, train_op):
-        """
-        A single training step
-        """
         self._step(train_data, train_labels, train_op=train_op, should_print=PRINT_STEPS)
 
     def test_step(self, test_data, test_labels):
-        """
-        Evaluates model on a test set
-        """
         self._step(test_data, test_labels, 1.0)
 
-    def _step(self, data, labels, dropout_keep_prob=DROPOUT_KEEP_PROBABILITY,
-              train_op=None, should_print=True):
+    def _step(self, data: np.ndarray, labels: np.ndarray,
+              dropout_keep_prob: float = DROPOUT_KEEP_PROBABILITY,
+              train_op=None, should_print: bool = True) -> None:
         data_for_step = {
             self.cnn.input_data: data,
             self.cnn.input_labels: labels,
@@ -51,59 +48,54 @@ class StepRunner:
             print(f"{current_time}: step {current_step}, loss {loss}, acc {accuracy}")
 
 
-def generate_batch_iterator(data, batch_size, epoch_count, should_shuffle=True):
-    data = np.array(data)
-    data_size = len(data)
-    batches_per_epoch = int((len(data) - 1) / batch_size) + 1
-    for epoch in range(epoch_count):
-        # Shuffle the data at each epoch
-        if should_shuffle:
-            shuffle_indices = np.random.permutation(np.arange(data_size))
-            shuffled_data = data[shuffle_indices]
-        else:
-            shuffled_data = data
-        for batch_index in range(batches_per_epoch):
-            start_index = batch_index * batch_size
-            end_index = min((batch_index + 1) * batch_size, data_size)
-            yield shuffled_data[start_index:end_index]
+def _split_data_into_batches(data: np.ndarray, labels: np.ndarray, batch_size: int,
+                             should_shuffle=True) -> Iterable[Tuple[np.ndarray, np.ndarray]]:
+    assert len(data) == len(labels)
+    data_count = len(data)
+    if should_shuffle:
+        shuffle_indices = np.random.permutation(np.arange(data_count))
+        batch_data = data[shuffle_indices]
+        batch_labels = labels[shuffle_indices]
+    else:
+        batch_data = data
+        batch_labels = labels
+
+    batch_count = int(math.ceil(data_count / batch_size))
+    for batch_index in range(batch_count):
+        start_index = batch_index * batch_size
+        end_index = min(data_count, (batch_index + 1) * batch_size)
+        yield batch_data[start_index:end_index], batch_labels[start_index:end_index]
 
 
-def train(train_data, train_labels, vocabulary, x_dev, y_dev, embedding_vectors=None):
-    # Training
-    # ==================================================
-
+def train(train_data: np.ndarray, train_labels: np.ndarray, vocabulary: Collection[str],
+          test_data: np.ndarray,
+          test_labels: np.ndarray, embedding_vectors: np.ndarray = None):
     with tf.Graph().as_default():
-        sess = tf.Session()
-        with sess.as_default():
+        session = tf.Session()
+        with session.as_default():
             cnn = CNN(
                 sequence_length=train_data.shape[1],
-                num_classes=train_labels.shape[1],
-                vocab_size=len(vocabulary),
+                number_of_classes=train_labels.shape[1],
+                vocabulary_size=len(vocabulary),
                 embedding_size=EMBEDDING_DIMENSION,
                 filter_sizes=FILTER_SIZES,
-                num_filters=FILTER_COUNT,
+                filter_count=FILTER_COUNT,
                 embedding=embedding_vectors)
 
-            # Define Training procedure
             global_step = tf.Variable(0, trainable=False)
-            optimizer = tf.train.AdamOptimizer(1e-3)
-            grads_and_vars = optimizer.compute_gradients(cnn.loss)
-            train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
+            optimizer = tf.train.AdamOptimizer(LEARNING_RATE)
+            gradients = optimizer.compute_gradients(cnn.loss)
+            training_operation = optimizer.apply_gradients(gradients, global_step=global_step)
 
-            # Initialize all variables
-            sess.run(tf.global_variables_initializer())
+            session.run(tf.global_variables_initializer())
 
-            step_runner = StepRunner(cnn, sess, global_step)
+            step_runner = StepRunner(cnn, session, global_step)
 
-            # Generate batches
-            batches = generate_batch_iterator(
-                list(zip(train_data, train_labels)), BATCH_SIZE, EPOCH_COUNT)
-            # Training loop. For each batch...
-            for batch in batches:
-                data_batch, label_batch = zip(*batch)
-                step_runner.train_step(data_batch, label_batch, train_op)
-                current_step = tf.train.global_step(sess, global_step)
-                if current_step % EVALUATE_EVERY == 0:
-                    print("\nEvaluation:")
-                    step_runner.test_step(x_dev, y_dev)
-                    print("")
+            for epoch in range(EPOCH_COUNT):
+                if epoch % EVALUATE_EVERY == 0:
+                    print(f"\nEvaluation, epoch {epoch}:")
+                    step_runner.test_step(test_data, test_labels)
+                batches = _split_data_into_batches(train_data, train_labels, BATCH_SIZE)
+                for batch in batches:
+                    data_batch, label_batch = batch
+                    step_runner.train_step(data_batch, label_batch, training_operation)
