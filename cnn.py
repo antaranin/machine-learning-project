@@ -38,10 +38,11 @@ class CNN(object):
     def _setup_embedding(self, vocabulary_size: int, embedding_size: int,
                          embedding: np.ndarray = None):
         embedding_to_use = embedding if embedding is not None \
-            else tf.random_uniform((vocabulary_size, embedding_size), -1.0, 1.0)
-
-        weights = tf.Variable(embedding_to_use, dtype='float32', trainable=False)
+            else tf.random_normal((vocabulary_size, embedding_size), mean=0, stddev=0.2)
+        # tf.random_uniform((vocabulary_size, embedding_size), -1.0, 1.0)
+        weights = tf.Variable(embedding_to_use, dtype='float32', trainable=True)
         embedded_vec = tf.nn.embedding_lookup(weights, self.placeholder_data)
+        # Add one dimension representing channels. Should be 1
         self.embedded_vectors = tf.expand_dims(embedded_vec, -1)
 
     def _setup_convolutional_pooling_layer(self, filter_sizes: Collection[int],
@@ -67,6 +68,8 @@ class CNN(object):
         shape_of_filter = (filter_size, embedding_size, 1, filter_count)
         weights = tf.Variable(tf.truncated_normal(shape_of_filter, stddev=0.1))
         bias = tf.Variable(tf.constant(0.1, shape=(filter_count,)))
+        # Input shape in form data, rows, columns, channels
+        # In our case that is ?, 62(sentence length) 300(embedding size), 1
         convolution = tf.nn.conv2d(
             self.embedded_vectors,
             weights,
@@ -76,16 +79,13 @@ class CNN(object):
         convolution_with_bias = tf.nn.bias_add(convolution, bias)
         feature_map = tf.nn.relu(convolution_with_bias)
 
-        '''
-        window size - since every filter corresponds to one pooled value, therefore,
-        there has to be max size of a sentence - filter size + 1 values in the pooling layer
-        '''
         window_size = max_sentence_length - filter_size + 1
         pooling = tf.nn.max_pool(
             feature_map,
             ksize=(1, window_size, 1, 1),
             strides=(1, 1, 1, 1),
             padding='VALID')
+
         return pooling
 
     def _setup_dropout_layer(self):
