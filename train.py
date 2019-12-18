@@ -80,8 +80,12 @@ def train(train_data: np.ndarray, train_labels: np.ndarray, vocabulary: Collecti
 
             global_step = tf.Variable(0, trainable=False)
             optimizer = tf.train.AdamOptimizer(LEARNING_RATE)
-            gradients = optimizer.compute_gradients(cnn.loss)
-            training_operation = optimizer.apply_gradients(gradients, global_step=global_step)
+            gradients_and_variables = optimizer.compute_gradients(cnn.loss)
+            clipped_gradients_and_variables = [
+                (tf.clip_by_norm(grad[0], CLIP_NORM), grad[1]) for grad in gradients_and_variables
+            ]
+            training_operation = optimizer.apply_gradients(clipped_gradients_and_variables,
+                                                           global_step=global_step)
 
             session.run(tf.global_variables_initializer())
 
@@ -90,8 +94,8 @@ def train(train_data: np.ndarray, train_labels: np.ndarray, vocabulary: Collecti
             for epoch in range(EPOCH_COUNT):
                 if epoch % EVALUATE_EVERY == 0:
                     print(f"\nEvaluation, epoch {epoch}:")
-                    step_runner.test_step(test_data, test_labels)
+                    step_runner.test_step(session, test_data, test_labels)
                 batches = _split_data_into_batches(train_data, train_labels, BATCH_SIZE)
                 for batch in batches:
                     data_batch, label_batch = batch
-                    step_runner.train_step(data_batch, label_batch, training_operation)
+                    step_runner.train_step(session, data_batch, label_batch, training_operation)
