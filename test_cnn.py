@@ -1,4 +1,4 @@
-from typing import Tuple, Union, List
+from typing import Collection, Dict
 
 import numpy as np
 import tensorflow as tf
@@ -7,14 +7,14 @@ import tensorflow as tf
 class CNN(object):
 
     def __init__(
-            self, sequence_length: int, number_of_classes: int, vocabulary_size: int,
-            embedding_size: int, filter_sizes: List[int], filter_count: int,
+            self, max_sentence_length: int, vocabulary_size: int, number_of_classes: int,
+            filter_sizes: Collection[int], filter_count: int, embedding_size: int,
             embedding: np.ndarray = None
     ):
-        self._setup_placeholders(sequence_length, number_of_classes)
+        self._setup_placeholders(max_sentence_length, number_of_classes)
         self._setup_embedding(vocabulary_size, embedding_size, embedding)
         self._setup_convolutional_pooling_layer(filter_sizes, embedding_size, filter_count,
-                                                sequence_length)
+                                                max_sentence_length)
         self._setup_dropout_layer()
 
         total_filter_count = filter_count * len(filter_sizes)
@@ -22,8 +22,16 @@ class CNN(object):
         self._setup_loss_calculation()
         self._setup_accuracy_calculation()
 
-    def _setup_placeholders(self, sequence_length: int, number_of_classes: int):
-        self.input_data = tf.placeholder(tf.int32, [None, sequence_length])
+    def create_data_dict(self, data: np.ndarray, labels: np.ndarray,
+                         dropout_keep_probability: float) -> Dict:
+        return {
+            self.input_data: data,
+            self.input_labels: labels,
+            self.dropout_keep_prob: dropout_keep_probability
+        }
+
+    def _setup_placeholders(self, max_sentence_length: int, number_of_classes: int):
+        self.input_data = tf.placeholder(tf.int32, [None, max_sentence_length])
         self.input_labels = tf.placeholder(tf.float32, [None, number_of_classes])
         self.dropout_keep_prob = tf.placeholder(tf.float32)
 
@@ -36,28 +44,29 @@ class CNN(object):
         embedded_vec = tf.nn.embedding_lookup(weights, self.input_data)
         self.embedded_vectors = tf.expand_dims(embedded_vec, -1)
 
-    def _setup_convolutional_pooling_layer(self, filter_sizes: Union[List[int], Tuple[int]],
+    def _setup_convolutional_pooling_layer(self, filter_sizes: Collection[int],
                                            embedding_size: int,
-                                           number_of_filters: int, sequence_length: int):
+                                           filter_count: int, max_sentence_length: int):
         pooled_outputs = [self._setup_convolutional_pooling_layer_for_filter(
             filter_size,
-            number_of_filters,
+            filter_count,
             embedding_size,
-            sequence_length
+            max_sentence_length
         ) for filter_size in filter_sizes]
 
-        total_filter_count = number_of_filters * len(filter_sizes)
+        total_filter_count = filter_count * len(filter_sizes)
         combined_pooled_features = tf.concat(pooled_outputs, axis=3)
         self.combined_pooled_features_flattened = tf.reshape(
             combined_pooled_features, [-1, total_filter_count]
         )
 
     def _setup_convolutional_pooling_layer_for_filter(self, filter_size: int,
-                                                      number_of_filters: int, embedding_size: int,
-                                                      sequence_length: int):
-        filter_shape = (filter_size, embedding_size, 1, number_of_filters)
-        weights = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1))
-        bias = tf.Variable(tf.constant(0.1, shape=(number_of_filters,)))
+                                                      filter_count: int,
+                                                      embedding_size: int,
+                                                      max_sentence_length: int):
+        shape_of_filter = (filter_size, embedding_size, 1, filter_count)
+        weights = tf.Variable(tf.truncated_normal(shape_of_filter, stddev=0.1))
+        bias = tf.Variable(tf.constant(0.1, shape=(filter_count,)))
         convolution = tf.nn.conv2d(
             self.embedded_vectors,
             weights,
@@ -68,12 +77,13 @@ class CNN(object):
         feature_map = tf.nn.relu(convolution_with_bias)
 
         '''
-        ksize - window size, since every filter corresponds to one pooled value, therefore,
-        there has to be size of the sequence - filter size + 1 values in the pooling layer
+        window size - since every filter corresponds to one pooled value, therefore,
+        there has to be max size of a sentence - filter size + 1 values in the pooling layer
         '''
+        window_size = max_sentence_length - filter_size + 1
         pooling = tf.nn.max_pool(
             feature_map,
-            ksize=(1, sequence_length - filter_size + 1, 1, 1),
+            ksize=(1, window_size, 1, 1),
             strides=(1, 1, 1, 1),
             padding='VALID')
         return pooling

@@ -11,34 +11,30 @@ from test_cnn import CNN
 
 class StepRunner:
     cnn: CNN
-    sess: tf.Session
 
-    def __init__(self, cnn: CNN, session: tf.Session, step_counter) -> None:
+    def __init__(self, cnn: CNN, step_counter) -> None:
         super().__init__()
         self.cnn = cnn
-        self.sess = session
         self.step_counter = step_counter
 
-    def train_step(self, train_data, train_labels, train_op):
-        self._step(train_data, train_labels, train_op=train_op, should_print=PRINT_STEPS)
+    def train_step(self, session: tf.Session, train_data: np.ndarray, train_labels: np.ndarray,
+                   training_operation):
+        self._step(session, train_data, train_labels, train_op=training_operation,
+                   should_print=PRINT_STEPS)
 
-    def test_step(self, test_data, test_labels):
-        self._step(test_data, test_labels, 1.0)
+    def test_step(self, session: tf.Session, test_data: np.ndarray, test_labels: np.ndarray):
+        self._step(session, test_data, test_labels, 1.0)
 
-    def _step(self, data: np.ndarray, labels: np.ndarray,
+    def _step(self, session: tf.Session, data: np.ndarray, labels: np.ndarray,
               dropout_keep_prob: float = DROPOUT_KEEP_PROBABILITY,
               train_op=None, should_print: bool = True) -> None:
-        data_for_step = {
-            self.cnn.input_data: data,
-            self.cnn.input_labels: labels,
-            self.cnn.dropout_keep_prob: dropout_keep_prob
-        }
+        data_for_step = self.cnn.create_data_dict(data, labels, dropout_keep_prob)
         if train_op is not None:
-            res = self.sess.run([self.step_counter, self.cnn.loss, self.cnn.accuracy, train_op],
-                                data_for_step)
+            res = session.run([self.step_counter, self.cnn.loss, self.cnn.accuracy, train_op],
+                              data_for_step)
         else:
-            res = self.sess.run([self.step_counter, self.cnn.loss, self.cnn.accuracy],
-                                data_for_step)
+            res = session.run([self.step_counter, self.cnn.loss, self.cnn.accuracy],
+                              data_for_step)
 
         if should_print:
             current_time = datetime.datetime.now().isoformat()
@@ -74,12 +70,12 @@ def train(train_data: np.ndarray, train_labels: np.ndarray, vocabulary: Collecti
         session = tf.Session()
         with session.as_default():
             cnn = CNN(
-                sequence_length=train_data.shape[1],
-                number_of_classes=train_labels.shape[1],
+                max_sentence_length=train_data.shape[1],
                 vocabulary_size=len(vocabulary),
-                embedding_size=EMBEDDING_DIMENSION,
+                number_of_classes=train_labels.shape[1],
                 filter_sizes=FILTER_SIZES,
                 filter_count=FILTER_COUNT,
+                embedding_size=EMBEDDING_DIMENSION,
                 embedding=embedding_vectors)
 
             global_step = tf.Variable(0, trainable=False)
@@ -89,7 +85,7 @@ def train(train_data: np.ndarray, train_labels: np.ndarray, vocabulary: Collecti
 
             session.run(tf.global_variables_initializer())
 
-            step_runner = StepRunner(cnn, session, global_step)
+            step_runner = StepRunner(cnn, global_step)
 
             for epoch in range(EPOCH_COUNT):
                 if epoch % EVALUATE_EVERY == 0:
