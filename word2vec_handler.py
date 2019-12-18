@@ -19,7 +19,7 @@ def get_vectors_for_words(model: FastTextKeyedVectors, words: Iterable[str]) -> 
         if word in model.vocab:
             vectors.append(model.vectors[model.vocab[word].index])
         else:
-            vectors.append(np.random.uniform(-0.25, 0.25, 300))
+            vectors.append(np.random.normal(0, 0.20, 300))
         index += 1
     return words_to_indexes, np.array(vectors)
 

@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 
 from config import *
-from test_cnn import CNN
+from cnn import CNN
 
 
 class StepRunner:
@@ -79,7 +79,7 @@ def train(train_data: np.ndarray, train_labels: np.ndarray, vocabulary: Collecti
                 embedding=embedding_vectors)
 
             global_step = tf.Variable(0, trainable=False)
-            optimizer = tf.train.AdamOptimizer(LEARNING_RATE)
+            optimizer = tf.train.AdadeltaOptimizer(LEARNING_RATE)
             gradients_and_variables = optimizer.compute_gradients(cnn.loss)
             clipped_gradients_and_variables = [
                 (tf.clip_by_norm(grad[0], CLIP_NORM), grad[1]) for grad in gradients_and_variables
