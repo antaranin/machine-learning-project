@@ -14,4 +14,4 @@ def run_mr(use_word_to_vec=True):
     t.train(train_data, train_labels, vocabulary, test_data, test_labels, embedding_vectors)
 
 
-run_mr(False)
+run_mr(True)

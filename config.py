@@ -1,9 +1,10 @@
 TRAIN_TO_TEST_SPLIT_RATIO = 0.9
+# Only modifiable if not using word2vec
 EMBEDDING_DIMENSION = 300
 FILTER_SIZES = [3, 4, 5]
 FILTER_COUNT = 128
 DROPOUT_KEEP_PROBABILITY = 0.5
-#Should be a multiplication of 2, for efficiency.
+# Should be a multiplication of 2, for efficiency.
 BATCH_SIZE = 64
 EPOCH_COUNT = 50
 EVALUATE_EVERY = 1
@@ -11,4 +12,3 @@ SHUFFLE_SEED = 42
 PRINT_STEPS = False
 LEARNING_RATE = 1e-3
 CLIP_NORM = 3
-

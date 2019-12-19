@@ -2,9 +2,20 @@ from typing import Collection, Dict
 
 import numpy as np
 import tensorflow as tf
+from tensorflow import Tensor
 
 
 class CNN(object):
+    _placeholder_data: Tensor
+    _placeholder_labels: Tensor
+    _placeholder_dropout: Tensor
+    _embedded_vectors: Tensor
+    _combined_pooled_features: Tensor
+    _dropout: Tensor
+    _label_scores: Tensor
+    _predicted_label_indexes: Tensor
+    loss: Tensor
+    accuracy: Tensor
 
     def __init__(
             self, max_sentence_length: int, vocabulary_size: int, number_of_classes: int,
@@ -25,15 +36,15 @@ class CNN(object):
     def create_data_dict(self, data: np.ndarray, labels: np.ndarray,
                          dropout_keep_probability: float) -> Dict:
         return {
-            self.placeholder_data: data,
-            self.placeholder_labels: labels,
-            self.placeholder_dropout: dropout_keep_probability
+            self._placeholder_data: data,
+            self._placeholder_labels: labels,
+            self._placeholder_dropout: dropout_keep_probability
         }
 
     def _setup_placeholders(self, max_sentence_length: int, number_of_classes: int):
-        self.placeholder_data = tf.placeholder(tf.int32, [None, max_sentence_length])
-        self.placeholder_labels = tf.placeholder(tf.float32, [None, number_of_classes])
-        self.placeholder_dropout = tf.placeholder(tf.float32)
+        self._placeholder_data = tf.placeholder(tf.int32, (None, max_sentence_length))
+        self._placeholder_labels = tf.placeholder(tf.float32, (None, number_of_classes))
+        self._placeholder_dropout = tf.placeholder(tf.float32)
 
     def _setup_embedding(self, vocabulary_size: int, embedding_size: int,
                          embedding: np.ndarray = None):
@@ -41,9 +52,9 @@ class CNN(object):
             else tf.random_normal((vocabulary_size, embedding_size), mean=0, stddev=0.2)
         # tf.random_uniform((vocabulary_size, embedding_size), -1.0, 1.0)
         weights = tf.Variable(embedding_to_use, dtype='float32', trainable=True)
-        embedded_vec = tf.nn.embedding_lookup(weights, self.placeholder_data)
+        embedded_vec = tf.nn.embedding_lookup(weights, self._placeholder_data)
         # Add one dimension representing channels. Should be 1
-        self.embedded_vectors = tf.expand_dims(embedded_vec, -1)
+        self._embedded_vectors = tf.expand_dims(embedded_vec, -1)
 
     def _setup_convolutional_pooling_layer(self, filter_sizes: Collection[int],
                                            embedding_size: int,
@@ -57,8 +68,9 @@ class CNN(object):
 
         total_filter_count = filter_count * len(filter_sizes)
         combined_pooled_features = tf.concat(pooled_outputs, axis=3)
-        self.combined_pooled_features_flattened = tf.reshape(
-            combined_pooled_features, [-1, total_filter_count]
+        # flatten features
+        self._combined_pooled_features = tf.reshape(
+            combined_pooled_features, (-1, total_filter_count)
         )
 
     def _setup_convolutional_pooling_layer_for_filter(self, filter_size: int,
@@ -71,7 +83,7 @@ class CNN(object):
         # Input shape in form data, rows, columns, channels
         # In our case that is ?, 62(sentence length) 300(embedding size), 1
         convolution = tf.nn.conv2d(
-            self.embedded_vectors,
+            self._embedded_vectors,
             weights,
             strides=(1, 1, 1, 1),
             padding="VALID")
@@ -89,24 +101,25 @@ class CNN(object):
         return pooling
 
     def _setup_dropout_layer(self):
-        self.dropout = tf.nn.dropout(self.combined_pooled_features_flattened,
-                                     self.placeholder_dropout)
+        self._dropout = tf.nn.dropout(self._combined_pooled_features,
+                                      self._placeholder_dropout)
 
     def _setup_output_layer(self, total_filter_count: int, number_of_classes: int):
         weights = tf.get_variable(
             "weights",
-            shape=[total_filter_count, number_of_classes],
+            shape=(total_filter_count, number_of_classes),
             initializer=tf.contrib.layers.xavier_initializer())
-        bias = tf.Variable(tf.constant(0.1, shape=[number_of_classes]))
-        self.scores = tf.nn.xw_plus_b(self.dropout, weights, bias)
-        self.prediction_indexes = tf.argmax(self.scores, axis=1)
+        bias = tf.Variable(tf.constant(0.1, shape=(number_of_classes,)))
+        self._label_scores = tf.nn.xw_plus_b(self._dropout, weights, bias)
+        self._predicted_label_indexes = tf.argmax(self._label_scores, axis=1)
 
     def _setup_accuracy_calculation(self):
-        label_indexes = tf.argmax(self.placeholder_labels, axis=1)
-        correct_predictions = tf.equal(self.prediction_indexes, label_indexes)
-        self.accuracy = tf.reduce_mean(tf.cast(correct_predictions, "float"))
+        # Gets the index of a label that is set (since the labels are set as binary values)
+        label_indexes = tf.argmax(self._placeholder_labels, axis=1)
+        matching_predictions = tf.equal(self._predicted_label_indexes, label_indexes)
+        self.accuracy = tf.reduce_mean(tf.cast(matching_predictions, "float"))
 
     def _setup_loss_calculation(self):
-        loss_matrix = tf.nn.softmax_cross_entropy_with_logits(logits=self.scores,
-                                                              labels=self.placeholder_labels)
+        loss_matrix = tf.nn.softmax_cross_entropy_with_logits(logits=self._label_scores,
+                                                              labels=self._placeholder_labels)
         self.loss = tf.reduce_mean(loss_matrix)
