@@ -11,7 +11,7 @@ class CNN(object):
     _placeholder_dropout: Tensor
     _embedded_vectors: Tensor
     _combined_pooled_features: Tensor
-    _dropout: Tensor
+    _dropout_result: Tensor
     _label_scores: Tensor
     _predicted_label_indexes: Tensor
     loss: Tensor
@@ -101,8 +101,8 @@ class CNN(object):
         return pooling
 
     def _setup_dropout_layer(self):
-        self._dropout = tf.nn.dropout(self._combined_pooled_features,
-                                      self._placeholder_dropout)
+        self._dropout_result = tf.nn.dropout(self._combined_pooled_features,
+                                             self._placeholder_dropout)
 
     def _setup_output_layer(self, total_filter_count: int, number_of_classes: int):
         weights = tf.get_variable(
@@ -110,7 +110,7 @@ class CNN(object):
             shape=(total_filter_count, number_of_classes),
             initializer=tf.contrib.layers.xavier_initializer())
         bias = tf.Variable(tf.constant(0.1, shape=(number_of_classes,)))
-        self._label_scores = tf.nn.xw_plus_b(self._dropout, weights, bias)
+        self._label_scores = tf.nn.xw_plus_b(self._dropout_result, weights, bias)
         self._predicted_label_indexes = tf.argmax(self._label_scores, axis=1)
 
     def _setup_accuracy_calculation(self):
