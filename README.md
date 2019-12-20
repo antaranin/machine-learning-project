@@ -28,6 +28,10 @@ The simplest way to run the program is by navigating to the project root and typ
 
 Please make sure to run Python 3, thus if both 2 and 3 are installed the command may look like `python3 runner.py`
 
+Also, please disregard the deprecation warnings coming from usage of tensorflow 1.14, 
+since usage of Keras was prohibited for this project (which is strongly incorporated in tensorflow 2) 
+we decided to use the outdated, yet functional tensorflow 1.14
+
 ## Data
 
 Project data is structured as such:  
