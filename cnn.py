@@ -20,10 +20,12 @@ class CNN(object):
     def __init__(
             self, max_sentence_length: int, vocabulary_size: int, number_of_classes: int,
             filter_sizes: Collection[int], filter_count: int, embedding_size: int,
-            embedding: np.ndarray = None
+            embedding: np.ndarray = None, trainable_embedding: bool = False,
+            random_embedding_mean: float = 0, random_embedding_std: float = 0.2
     ):
         self._setup_placeholders(max_sentence_length, number_of_classes)
-        self._setup_embedding(vocabulary_size, embedding_size, embedding)
+        self._setup_embedding(vocabulary_size, embedding_size, embedding, trainable_embedding,
+                              random_embedding_mean, random_embedding_std)
         self._setup_convolutional_pooling_layer(filter_sizes, embedding_size, filter_count,
                                                 max_sentence_length)
         self._setup_dropout_layer()
@@ -47,11 +49,13 @@ class CNN(object):
         self._placeholder_dropout = tf.placeholder(tf.float32)
 
     def _setup_embedding(self, vocabulary_size: int, embedding_size: int,
-                         embedding: np.ndarray = None):
+                         embedding: np.ndarray = None, trainable_embedding: bool = False,
+                         random_embedding_mean: float = 0, random_embedding_std: float = 0.2):
         embedding_to_use = embedding if embedding is not None \
-            else tf.random_normal((vocabulary_size, embedding_size), mean=0, stddev=0.2)
+            else tf.random_normal((vocabulary_size, embedding_size), mean=random_embedding_mean,
+                                  stddev=random_embedding_std)
         # tf.random_uniform((vocabulary_size, embedding_size), -1.0, 1.0)
-        weights = tf.Variable(embedding_to_use, dtype='float32', trainable=True)
+        weights = tf.Variable(embedding_to_use, dtype='float32', trainable=trainable_embedding)
         embedded_vec = tf.nn.embedding_lookup(weights, self._placeholder_data)
         # Add one dimension representing channels. Should be 1
         self._embedded_vectors = tf.expand_dims(embedded_vec, -1)

@@ -76,7 +76,11 @@ def train(train_data: np.ndarray, train_labels: np.ndarray, vocabulary: Collecti
                 filter_sizes=FILTER_SIZES,
                 filter_count=FILTER_COUNT,
                 embedding_size=EMBEDDING_DIMENSION,
-                embedding=embedding_vectors)
+                embedding=embedding_vectors,
+                random_embedding_mean=RANDOM_NORMAL_VECTOR_MEAN,
+                random_embedding_std=RANDOM_NORMAL_VECTOR_STANDARD_DEV,
+                trainable_embedding=TRAINABLE_EMBEDDING
+            )
 
             global_step = tf.Variable(0, trainable=False)
             optimizer = tf.train.AdamOptimizer(LEARNING_RATE)

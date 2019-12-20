@@ -6,6 +6,7 @@ import numpy as np
 from gensim.models import KeyedVectors
 from gensim.models.keyedvectors import FastTextKeyedVectors
 
+from config import RANDOM_NORMAL_VECTOR_MEAN, RANDOM_NORMAL_VECTOR_STANDARD_DEV
 from data_importer import load_vocabulary_mr
 
 
@@ -19,7 +20,9 @@ def get_vectors_for_words(model: FastTextKeyedVectors, words: Iterable[str]) -> 
         if word in model.vocab:
             vectors.append(model.vectors[model.vocab[word].index])
         else:
-            vectors.append(np.random.normal(0, 0.20, 300))
+            vectors.append(
+                np.random.normal(RANDOM_NORMAL_VECTOR_MEAN, RANDOM_NORMAL_VECTOR_STANDARD_DEV, 300)
+            )
         index += 1
     return words_to_indexes, np.array(vectors)
 
@@ -58,5 +61,3 @@ def load_vectors_and_index_mapping(title: str) -> Tuple[Dict[str, int], np.ndarr
             words_to_indexes[entry[0]] = entry[1]
     vectors = np.load(f"{dir_name}/vectors.npy")
     return words_to_indexes, vectors
-
-
